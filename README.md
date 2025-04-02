@@ -10,6 +10,7 @@ A bot to moderate comments on my YouTube channel using advanced moderation techn
 - `google-auth-oauthlib` library
 - `google-api-python-client` library
 - `requests` library
+- `google-cloud-language` library
 
 ### Installation
 
@@ -21,12 +22,27 @@ A bot to moderate comments on my YouTube channel using advanced moderation techn
 
 2. Install the required libraries:
    ```sh
-   pip install google-auth-oauthlib google-api-python-client requests
+   pip install google-auth-oauthlib google-api-python-client requests google-cloud-language
    ```
 
-3. Set up your API keys:
+3. Set up your `secrets.json` file with the following structure:
+   ```json
+   {
+     "YOUTUBE_CLIENT_SECRET_FILE": "path/to/your/client_secret.json",
+     "PERSPECTIVE_API_KEY": "YOUR_PERSPECTIVE_API_KEY",
+     "GOOGLE_CLOUD_CREDENTIALS_FILE": "path/to/your/google-cloud-credentials.json",
+     "CHANNEL_ID": "YOUR_CHANNEL_ID"
+   }
+   ```
+   - Replace `path/to/your/client_secret.json` with the path to your YouTube client secret file.
    - Replace `YOUR_PERSPECTIVE_API_KEY` with your actual Perspective API key.
+   - Replace `path/to/your/google-cloud-credentials.json` with the path to your Google Cloud credentials file.
    - Replace `YOUR_CHANNEL_ID` with your actual YouTube channel ID.
+
+4. Enable the necessary APIs:
+   - Go to the [Google Cloud Console](https://console.cloud.google.com/).
+   - Enable the **Google Cloud Natural Language API**.
+   - Enable the **Perspective API** through the [Perspective API Console](https://console.cloud.google.com/apis/library/commentanalyzer.googleapis.com).
 
 ### Usage
 
