@@ -9,6 +9,9 @@ from google.cloud import language_v1
 import json
 import pickle
 import logging
+import time
+from ratelimit import limits, sleep_and_retry
+import emoji
 
 # Load secrets from secrets file
 with open('secrets.json') as secrets_file:
@@ -116,7 +119,7 @@ def moderate_comments(youtube, video_id, processed_comments):
                 if contains_inappropriate_content(comment):
                     delete_comment(youtube, comment_id)
                 # Mark the comment as processed after moderation check
-                processed_comments[comment_id] = True
+                processed_comments[comment_id] = {"content": comment, "processed": True}
 
         if "nextPageToken" in response:
             request = youtube.commentThreads().list(
@@ -130,8 +133,22 @@ def moderate_comments(youtube, video_id, processed_comments):
         else:
             break
 
+def preprocess_comment(comment):
+    logger.info("Preprocessing comment")
+    # Remove emojis
+    comment = emoji.replace_emoji(comment, replace='')
+    # Remove YouTube timestamps (e.g., 00:12, 1:23:45)
+    comment = re.sub(r'\b\d{1,2}:\d{2}(?::\d{2})?\b', '', comment)
+    return comment
+
 def contains_inappropriate_content(comment):
     logger.info("Checking if comment contains inappropriate content")
+    comment = preprocess_comment(comment)
+    # Skip empty comments
+    if not comment.strip():
+        logger.info("Skipped empty comment after preprocessing")
+        return False
+
     # Define inappropriate content criteria
     inappropriate_words = ["spam", "hate", "inappropriate"]
     pattern = re.compile(r"(http|www|\.com|\.net|\.org)")
@@ -147,6 +164,7 @@ def contains_inappropriate_content(comment):
         return True
 
     # Check sentiment analysis
+    language = None  # Initialize language variable
     try:
         language = detect_language(comment)
         if language == 'en' and analyze_sentiment(comment) < sentiment_threshold:
@@ -156,7 +174,7 @@ def contains_inappropriate_content(comment):
         pass
 
     # Check Perspective API for toxicity
-    if is_toxic(comment):
+    if is_toxic(comment, language):
         return True
 
     return False
@@ -178,22 +196,32 @@ def analyze_sentiment(comment):
     sentiment_score = response.document_sentiment.score
     return sentiment_score
 
-def is_toxic(comment):
+@sleep_and_retry
+@limits(calls=60, period=60)
+def is_toxic(comment, language):
     logger.info(f"Making Perspective API request for comment: {comment}")
+    # Skip Perspective API check if language is unsupported
+    if language != 'en':
+        logger.info(f"Skipping Perspective API check for unsupported language: {language}")
+        return False
     # Call Perspective API
     url = f"https://commentanalyzer.googleapis.com/v1alpha1/comments:analyze?key={PERSPECTIVE_API_KEY}"
     data = {
         "comment": {"text": comment},
         "requestedAttributes": {"TOXICITY": {}}
     }
-    response = requests.post(url, json=data)
-    if response.status_code == 200:
-        toxicity_score = response.json().get("attributeScores", {}).get("TOXICITY", {}).get("summaryScore", {}).get("value", 0.0)
-        logger.info(f"Perspective API response: {response.json()}")
-        return toxicity_score >= 0.8  # Example threshold for toxicity
-    else:
-        logger.error(f"Error in Perspective API request: {response.status_code}, {response.text}")
-        return False
+    while True:
+        response = requests.post(url, json=data)
+        if response.status_code == 200:
+            toxicity_score = response.json().get("attributeScores", {}).get("TOXICITY", {}).get("summaryScore", {}).get("value", 0.0)
+            logger.info(f"Perspective API response: {response.json()}")
+            return toxicity_score >= 0.8  # Example threshold for toxicity
+        elif response.status_code == 429:
+            logger.warning("Rate limit exceeded. Retrying after 60 seconds.")
+            time.sleep(60)  # Wait for 60 seconds before retrying
+        else:
+            logger.error(f"Error in Perspective API request: {response.status_code}, {response.text}")
+            return False
 
 def delete_comment(youtube, comment_id):
     logger.info(f"Deleting comment ID: {comment_id}")
