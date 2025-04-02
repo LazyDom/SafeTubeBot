@@ -44,6 +44,9 @@ A bot to moderate comments on my YouTube channel using advanced moderation techn
    - Enable the **Google Cloud Natural Language API**.
    - Enable the **Perspective API** through the [Perspective API Console](https://console.cloud.google.com/apis/library/commentanalyzer.googleapis.com).
 
+### $${\textbf{\color{red}WARNING}}$$
+If you don't know how to manage OAuth 2.0 and API keys, please don't proceed. Improper handling of these credentials can lead to security risks and unauthorized access.
+
 ### Usage
 
 Run the script to moderate comments on your YouTube channel:
